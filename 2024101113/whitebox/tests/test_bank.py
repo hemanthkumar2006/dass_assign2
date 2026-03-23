@@ -18,3 +18,25 @@ def test_bank_payout_insufficient_funds():
     bank = Bank()
     with pytest.raises(ValueError):
         bank.pay_out(bank.get_balance() + 100)
+
+def test_bank_init():
+    bank = Bank()
+    assert bank.get_balance() > 0
+
+def test_bank_pay_out_success():
+    bank = Bank()
+    amount = 500
+    initial = bank.get_balance()
+    bank.pay_out(amount)
+    assert bank.get_balance() == initial - amount
+
+def test_bank_collect_positive():
+    bank = Bank()
+    amount = 500
+    initial = bank.get_balance()
+    bank.collect(amount)
+    assert bank.get_balance() == initial + amount
+
+def test_bank_repr():
+    bank = Bank()
+    assert "Bank" in repr(bank)

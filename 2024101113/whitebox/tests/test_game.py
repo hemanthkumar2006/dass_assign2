@@ -1,7 +1,7 @@
 import pytest
 from moneypoly.game import Game
 from moneypoly.player import Player
-from moneypoly.property import Property
+from moneypoly.property import create_property
 
 def test_find_winner_returns_highest_net_worth():
     game = Game(["Alice", "Bob"])
@@ -23,7 +23,7 @@ def test_trade_adds_money_to_seller():
     seller.balance = 500
     buyer.balance = 1000
     
-    prop = Property("TestProp", 1, 200, 20)
+    prop = create_property("TestProp", 1, 200, 20)
     seller.add_property(prop)
     prop.owner = seller
     
