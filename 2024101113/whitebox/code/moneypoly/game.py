@@ -1,5 +1,5 @@
-# pylint: disable=too-many-instance-attributes, too-many-branches
-"""Module docstring"""
+"""Module managing the full flow of a MoneyPoly game session."""
+from dataclasses import dataclass, field
 
 from moneypoly.config import (
     JAIL_FINE,
@@ -17,19 +17,88 @@ from moneypoly.cards import CardDeck, CHANCE_CARDS, COMMUNITY_CHEST_CARDS
 from moneypoly import ui
 
 
+@dataclass
+class Decks:
+    """Holds the two card decks used during a MoneyPoly game."""
+
+    chance: CardDeck = field(init=False)
+    community: CardDeck = field(init=False)
+
+    def __post_init__(self):
+        self.chance = CardDeck(CHANCE_CARDS)
+        self.community = CardDeck(COMMUNITY_CHEST_CARDS)
+
+
+@dataclass
+class GameEngine:
+    """Groups the core game engine components: board, bank, and dice."""
+
+    board: Board = field(default_factory=Board)
+    bank: Bank = field(default_factory=Bank)
+    dice: Dice = field(default_factory=Dice)
+
+
 class Game:
     """Manages the full state and flow of a MoneyPoly game session."""
 
     def __init__(self, player_names):
-        self.board = Board()
-        self.bank = Bank()
-        self.dice = Dice()
+        self._engine = GameEngine()
         self.players = [Player(name) for name in player_names]
-        self.current_index = 0
-        self.turn_number = 0
-        self.running = True
-        self.chance_deck = CardDeck(CHANCE_CARDS)
-        self.community_deck = CardDeck(COMMUNITY_CHEST_CARDS)
+        self._state = {"current_index": 0, "turn_number": 0, "running": True}
+        self.decks = Decks()
+
+    @property
+    def board(self):
+        """Return the game board."""
+        return self._engine.board
+
+    @property
+    def bank(self):
+        """Return the bank."""
+        return self._engine.bank
+
+    @property
+    def dice(self):
+        """Return the dice."""
+        return self._engine.dice
+
+    @property
+    def current_index(self):
+        """Return the index of the current player."""
+        return self._state["current_index"]
+
+    @current_index.setter
+    def current_index(self, value):
+        self._state["current_index"] = value
+
+    @property
+    def turn_number(self):
+        """Return the current turn number."""
+        return self._state["turn_number"]
+
+    @turn_number.setter
+    def turn_number(self, value):
+        self._state["turn_number"] = value
+
+    @property
+    def running(self):
+        """Return whether the game is currently active."""
+        return self._state["running"]
+
+    @running.setter
+    def running(self, value):
+        self._state["running"] = value
+
+    # Keep old attribute names as aliases for compatibility
+    @property
+    def chance_deck(self):
+        """Return the Chance card deck."""
+        return self.decks.chance
+
+    @property
+    def community_deck(self):
+        """Return the Community Chest card deck."""
+        return self.decks.community
 
     def current_player(self):
         """Return the Player whose turn it currently is."""
@@ -78,42 +147,59 @@ class Game:
         tile = self.board.get_tile_type(position)
         print(f"  {player.name} moved to position {position}  [{tile}]")
 
-        if tile == "go_to_jail":
-            player.go_to_jail()
-            print(f"  {player.name} has been sent to Jail!")
+        tile_handlers = {
+            "go_to_jail":      self._on_go_to_jail,
+            "income_tax":      self._on_income_tax,
+            "luxury_tax":      self._on_luxury_tax,
+            "free_parking":    self._on_free_parking,
+            "chance":          self._on_chance,
+            "community_chest": self._on_community_chest,
+            "railroad":        self._on_purchasable,
+            "property":        self._on_purchasable,
+        }
 
-        elif tile == "income_tax":
-            player.deduct_money(INCOME_TAX_AMOUNT)
-            self.bank.collect(INCOME_TAX_AMOUNT)
-            print(f"  {player.name} paid income tax: ${INCOME_TAX_AMOUNT}.")
-
-        elif tile == "luxury_tax":
-            player.deduct_money(LUXURY_TAX_AMOUNT)
-            self.bank.collect(LUXURY_TAX_AMOUNT)
-            print(f"  {player.name} paid luxury tax: ${LUXURY_TAX_AMOUNT}.")
-
-        elif tile == "free_parking":
-            print(f"  {player.name} rests on Free Parking. Nothing happens.")
-
-        elif tile == "chance":
-            card = self.chance_deck.draw()
-            self._apply_card(player, card)
-
-        elif tile == "community_chest":
-            card = self.community_deck.draw()
-            self._apply_card(player, card)
-
-        elif tile == "railroad":
-            prop = self.board.get_property_at(position)
-            if prop is not None:
-                self._handle_property_tile(player, prop)
-
-        elif tile == "property":
-            prop = self.board.get_property_at(position)
-            if prop is not None:
-                self._handle_property_tile(player, prop)
+        handler = tile_handlers.get(tile)
+        if handler:
+            handler(player, position)
 
         self._check_bankruptcy(player)
+
+    def _on_go_to_jail(self, player, _position):
+        """Handle the Go To Jail tile."""
+        player.go_to_jail()
+        print(f"  {player.name} has been sent to Jail!")
+
+    def _on_income_tax(self, player, _position):
+        """Charge the player income tax."""
+        player.deduct_money(INCOME_TAX_AMOUNT)
+        self.bank.collect(INCOME_TAX_AMOUNT)
+        print(f"  {player.name} paid income tax: ${INCOME_TAX_AMOUNT}.")
+
+    def _on_luxury_tax(self, player, _position):
+        """Charge the player luxury tax."""
+        player.deduct_money(LUXURY_TAX_AMOUNT)
+        self.bank.collect(LUXURY_TAX_AMOUNT)
+        print(f"  {player.name} paid luxury tax: ${LUXURY_TAX_AMOUNT}.")
+
+    def _on_free_parking(self, player, _position):
+        """Nothing happens on Free Parking."""
+        print(f"  {player.name} rests on Free Parking. Nothing happens.")
+
+    def _on_chance(self, player, _position):
+        """Draw and apply a Chance card."""
+        card = self.chance_deck.draw()
+        self._apply_card(player, card)
+
+    def _on_community_chest(self, player, _position):
+        """Draw and apply a Community Chest card."""
+        card = self.community_deck.draw()
+        self._apply_card(player, card)
+
+    def _on_purchasable(self, player, position):
+        """Handle landing on a property or railroad tile."""
+        prop = self.board.get_property_at(position)
+        if prop is not None:
+            self._handle_property_tile(player, prop)
 
 
     def _handle_property_tile(self, player, prop):
@@ -301,45 +387,58 @@ class Game:
         action = card["action"]
         value = card["value"]
 
-        if action == "collect":
-            amount = self.bank.pay_out(value)
-            player.add_money(amount)
+        card_handlers = {
+            "collect":          self._card_collect,
+            "pay":              self._card_pay,
+            "jail":             self._card_jail,
+            "jail_free":        self._card_jail_free,
+            "move_to":          self._card_move_to,
+            "birthday":         self._card_collect_from_others,
+            "collect_from_all": self._card_collect_from_others,
+        }
+        handler = card_handlers.get(action)
+        if handler:
+            handler(player, value)
 
-        elif action == "pay":
-            player.deduct_money(value)
-            self.bank.collect(value)
+    def _card_collect(self, player, value):
+        """Pay out `value` from bank to player."""
+        amount = self.bank.pay_out(value)
+        player.add_money(amount)
 
-        elif action == "jail":
-            player.go_to_jail()
-            print(f"  {player.name} has been sent to Jail!")
+    def _card_pay(self, player, value):
+        """Deduct `value` from player and pay it to bank."""
+        player.deduct_money(value)
+        self.bank.collect(value)
 
-        elif action == "jail_free":
-            player.get_out_of_jail_cards += 1
-            print(f"  {player.name} now holds a Get Out of Jail Free card.")
+    def _card_jail(self, player, _value):
+        """Send player to jail."""
+        player.go_to_jail()
+        print(f"  {player.name} has been sent to Jail!")
 
-        elif action == "move_to":
-            old_pos = player.position
-            player.position = value
-            if value < old_pos:
-                player.add_money(GO_SALARY)
-                print(f"  {player.name} passed Go and collected ${GO_SALARY}.")
-            tile = self.board.get_tile_type(value)
-            if tile == "property":
-                prop = self.board.get_property_at(value)
-                if prop:
-                    self._handle_property_tile(player, prop)
+    def _card_jail_free(self, player, _value):
+        """Give the player a Get Out of Jail Free card."""
+        player.get_out_of_jail_cards += 1
+        print(f"  {player.name} now holds a Get Out of Jail Free card.")
 
-        elif action == "birthday":
-            for other in self.players:
-                if other != player and other.balance >= value:
-                    other.deduct_money(value)
-                    player.add_money(value)
+    def _card_move_to(self, player, value):
+        """Move player to specific board position, awarding GO salary if passed."""
+        old_pos = player.position
+        player.position = value
+        if value < old_pos:
+            player.add_money(GO_SALARY)
+            print(f"  {player.name} passed Go and collected ${GO_SALARY}.")
+        tile = self.board.get_tile_type(value)
+        if tile == "property":
+            prop = self.board.get_property_at(value)
+            if prop:
+                self._handle_property_tile(player, prop)
 
-        elif action == "collect_from_all":
-            for other in self.players:
-                if other != player and other.balance >= value:
-                    other.deduct_money(value)
-                    player.add_money(value)
+    def _card_collect_from_others(self, player, value):
+        """Collect `value` from every other player who can afford it."""
+        for other in self.players:
+            if other != player and other.balance >= value:
+                other.deduct_money(value)
+                player.add_money(value)
 
 
     def _check_bankruptcy(self, player):

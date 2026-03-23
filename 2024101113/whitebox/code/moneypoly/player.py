@@ -1,6 +1,16 @@
-# pylint: disable=too-many-instance-attributes
-"""Module docstring"""
+"""Module containing the Player class for the MoneyPoly game."""
+from dataclasses import dataclass
 from moneypoly.config import STARTING_BALANCE, BOARD_SIZE, GO_SALARY, JAIL_POSITION
+
+
+@dataclass
+class JailState:
+    """Groups all jail-related state for a player into one object."""
+
+    in_jail: bool = False
+    jail_turns: int = 0
+    get_out_of_jail_cards: int = 0
+    is_eliminated: bool = False
 
 
 class Player:
@@ -11,10 +21,7 @@ class Player:
         self.balance = balance
         self.position = 0
         self.properties = []
-        self.in_jail = False
-        self.jail_turns = 0
-        self.get_out_of_jail_cards = 0
-        self.is_eliminated = False
+        self._jail = JailState()
 
 
     def add_money(self, amount):
@@ -28,6 +35,48 @@ class Player:
         if amount < 0:
             raise ValueError(f"Cannot deduct a negative amount: {amount}")
         self.balance -= amount
+
+    # ------------------------------------------------------------------
+    # Jail state proxies – keep the public API unchanged
+    # ------------------------------------------------------------------
+
+    @property
+    def in_jail(self):
+        """Return True if this player is currently in jail."""
+        return self._jail.in_jail
+
+    @in_jail.setter
+    def in_jail(self, value):
+        self._jail.in_jail = value
+
+    @property
+    def jail_turns(self):
+        """Return the number of turns this player has been in jail."""
+        return self._jail.jail_turns
+
+    @jail_turns.setter
+    def jail_turns(self, value):
+        self._jail.jail_turns = value
+
+    @property
+    def get_out_of_jail_cards(self):
+        """Return how many Get Out of Jail Free cards this player holds."""
+        return self._jail.get_out_of_jail_cards
+
+    @get_out_of_jail_cards.setter
+    def get_out_of_jail_cards(self, value):
+        self._jail.get_out_of_jail_cards = value
+
+    @property
+    def is_eliminated(self):
+        """Return True if this player has been eliminated from the game."""
+        return self._jail.is_eliminated
+
+    @is_eliminated.setter
+    def is_eliminated(self, value):
+        self._jail.is_eliminated = value
+
+    # ------------------------------------------------------------------
 
     def is_bankrupt(self):
         """Return True if this player has no money remaining."""
